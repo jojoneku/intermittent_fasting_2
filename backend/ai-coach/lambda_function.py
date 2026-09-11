@@ -27,6 +27,30 @@ _ADVISOR_MODEL_ID = os.environ.get("ADVISOR_MODEL_ID", _MODEL_ID)
 # environment map, so read the current one first and put every existing key
 # back, or the function loses the rest of its config.
 _ADVISOR_MAX_TOKENS = int(os.environ.get("ADVISOR_MAX_TOKENS", "3000"))
+
+# Wall clock the streaming advisor allows itself for one hop, in seconds.
+#
+# `max_tokens` is not what ends a long turn -- time is. The stream runs inside a
+# Lambda with its own timeout, and when that timeout arrives mid-generation the
+# response simply stops: no `end` frame, no `error` frame, nothing the client can
+# read as a reason. The app is then required to treat a stream with no terminator
+# as a failure (the alternative is presenting half an answer as a whole one), so
+# it retried -- wiping the prose already on screen, re-generating the same long
+# answer into the same ceiling, and reporting "connection hiccup" three times
+# before giving up. Every one of those attempts was billed in full.
+#
+# This budget makes that failure mode unreachable. It is set BELOW the function
+# timeout, so the turn stops itself while it still has time to speak: it breaks
+# out of the Bedrock stream, marks the reply truncated, and emits a real `end`
+# frame. The user keeps everything written so far plus a line saying it stopped
+# early -- the same treatment a max_tokens overshoot already gets, which is a
+# readable answer instead of an error.
+#
+# Keep the margin. The frames still have to be written out and flushed through
+# the adapter and CloudFront after the break, and a budget equal to the timeout
+# is a budget that expires while doing it.
+_ADVISOR_STREAM_BUDGET_SEC = float(
+    os.environ.get("ADVISOR_STREAM_BUDGET_SEC", "100"))
 _DAILY_CAP = int(os.environ.get("DAILY_CAP", "100"))
 # Verbose request logging, OFF by default. Even when enabled it never logs the
 # Authorization header (a live Supabase JWT) or the request body (chat text,
@@ -1130,6 +1154,17 @@ _TRUNCATION_NOTICE = (
     "the part you want and I'll pick it up from there.*"
 )
 
+# The same idea for the OTHER ceiling: the turn ran out of wall clock rather than
+# tokens (see _ADVISOR_STREAM_BUDGET_SEC). Worth its own wording because the
+# advice differs -- a length overshoot is fixed by asking for one part, a slow
+# turn by asking for less work -- and because reading "length limit" on an answer
+# that was nowhere near it sends anyone debugging this to the wrong constant.
+_TIME_NOTICE = (
+    "\n\n---\n"
+    "*That one took too long to finish writing, so it stopped here. Ask me to "
+    "carry on from this point, or for a shorter version.*"
+)
+
 # Stable, cache-friendly system prefix: persona + knowledge-base principles +
 # anti-hallucination contract + the "financial position" diagnostic structure.
 # Only distilled principles — never copyrighted book text.
@@ -1631,6 +1666,17 @@ def advise_finance_stream(payload, request):
         )
 
         for event in raw["body"]:
+            # Checked per event rather than per token: this is the only place
+            # the turn can stop itself in a way the client can read. See
+            # _ADVISOR_STREAM_BUDGET_SEC.
+            if (_ADVISOR_STREAM_BUDGET_SEC > 0
+                    and time.monotonic() - started > _ADVISOR_STREAM_BUDGET_SEC):
+                stop_reason = "time_budget"
+                print("adviseFinance: stream budget of "
+                      f"{_ADVISOR_STREAM_BUDGET_SEC}s spent -- ending the turn "
+                      "with what it has")
+                break
+
             chunk = event.get("chunk")
             if not chunk:
                 continue
@@ -1687,11 +1733,28 @@ def advise_finance_stream(payload, request):
                 stop_reason = (ev.get("delta") or {}).get("stop_reason", stop_reason)
                 usage.update(ev.get("usage") or {})
 
+        if stop_reason == "time_budget":
+            # A tool_use block whose input was still arriving is not a call --
+            # its JSON never finished, so running it would run a tool with no
+            # arguments. partial_json only holds blocks that never got their
+            # content_block_stop, which is exactly those.
+            for idx in partial_json:
+                if 0 <= idx < len(content):
+                    content[idx] = None
+
         content = [b for b in content if b]
         response_text, tool_calls = _split_reply(content)
-        truncated = stop_reason == "max_tokens"
-        if truncated:
-            response_text += _TRUNCATION_NOTICE
+        if stop_reason == "time_budget" and tool_calls:
+            # Tool calls survived the cut, so the turn is not over: the client
+            # runs them and comes back on a fresh invocation with a fresh
+            # budget. Saying it stopped early would be wrong, and the notice
+            # would be quoted back to the model as its own words next hop.
+            truncated = False
+        else:
+            truncated = stop_reason in ("max_tokens", "time_budget")
+            if truncated:
+                response_text += (_TIME_NOTICE if stop_reason == "time_budget"
+                                  else _TRUNCATION_NOTICE)
 
         _cost_line(
             msgs=len(request["messages"]),

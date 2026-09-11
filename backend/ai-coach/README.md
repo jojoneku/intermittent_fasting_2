@@ -100,7 +100,7 @@ end". The other four ops stay on the HTTP API — they finish well inside 30s.
 
 | | |
 |---|---|
-| Function | `food-advisor-stream` — ap-southeast-1, python3.12, **arm64**, 1024 MB, 45s |
+| Function | `food-advisor-stream` — ap-southeast-1, python3.12, **arm64**, 1024 MB, **120s** |
 | Handler | `run.sh`, via `AWS_LAMBDA_EXEC_WRAPPER=/opt/bootstrap` |
 | Layer | `arn:aws:lambda:ap-southeast-1:753240598075:layer:LambdaAdapterLayerArm64:28` |
 | URL | `https://hwshru3edc3n7clcvv6p57x42u0wivou.lambda-url.ap-southeast-1.on.aws/` |
@@ -115,6 +115,37 @@ old buffered path** — so enabling and rolling back are both one value:
    `https://d117xbrhlnuvq9.cloudfront.net/v1/advisor` (the CloudFront domain,
    not the Function URL — see below).
 2. Push to `main`. Clearing the secret rolls back with no code change.
+
+### The wall clock, which is what actually ends a long turn
+
+`max_tokens` is the backstop; **time is the real limit**. The function was set to
+45s, and a long answer was still being generated when Lambda killed it. The
+stream then stopped with no `end` and no `error` frame — and the app is required
+to treat a stream with no terminator as a failure, because the alternative is
+presenting half an answer as a whole one. So it wiped the prose already on
+screen, re-generated the same long answer into the same 45s ceiling, and did it
+three times before giving up. The user saw "Connection hiccup — trying again…"
+three times and kept nothing; Bedrock billed all three.
+
+Two things fix it, and both are needed:
+
+- **Function timeout 120s**, now set by CI (`update-function-configuration
+  --timeout 120`) rather than by hand in the console, so it survives the next
+  person who recreates the function. It must stay *below*
+  `CloudAiCoachService.advisorTimeoutSeconds` (also 120s — raise the client
+  first, ship it, then raise this).
+- **`ADVISOR_STREAM_BUDGET_SEC`, default 100s.** A soft deadline inside
+  `advise_finance_stream`. When it is spent the turn breaks out of the Bedrock
+  stream, appends a line saying it stopped early, and emits a real `end` frame.
+  The user reads a short answer instead of an error, and the client has nothing
+  to retry. This is what makes the failure mode unreachable regardless of what
+  the timeout is set to — keep the margin between the two, since the closing
+  frames still have to flush through the adapter and CloudFront.
+
+CloudFront's 60s origin read timeout is **not** a cap on the whole response: it
+bounds the gap between packets, and a streaming turn emits deltas continuously.
+It is worth re-checking there first if a long turn still dies at ~60s, since
+CloudFront's own maximum is 60s without a quota increase.
 
 ### Three things that fail silently
 
@@ -148,8 +179,10 @@ SigV4-signs to the Lambda. Nothing is publicly invokable.
 | Endpoint | `https://d117xbrhlnuvq9.cloudfront.net/v1/advisor` |
 
 Configured deliberately: caching **disabled**, compression **off** (it can force
-buffering and defeat streaming), origin read timeout **60s** to clear the
-Lambda's 45s, and origin request policy `AllViewerExceptHostHeader` — OAC has to
+buffering and defeat streaming), origin read timeout **60s** — a per-packet
+idle timeout, not a cap on the whole response, so it clears a 120s streaming
+turn as long as deltas keep arriving — and origin request policy
+`AllViewerExceptHostHeader` — OAC has to
 set the Host header it signs against, so forwarding the viewer's would break
 every signature.
 
