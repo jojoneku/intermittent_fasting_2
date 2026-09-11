@@ -370,11 +370,35 @@ class _AiChatBodyState extends State<AiChatBody> {
 
   @override
   Widget build(BuildContext context) {
-    final meta = _entryMeta[widget.entryPoint]!;
     // viewInsetsOf, not MediaQuery.of: this pads for the keyboard only, and a
     // full MediaQuery dependency rebuilt the whole chat on unrelated metrics
     // changes (screenshot overlays, system bars, orientation).
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+
+    // Measured, not guessed: the confirm card sits in this Column's fixed
+    // (non-scrolling) tail, so its ceiling has to come from the height this
+    // shell actually got. The sheet can be dragged down to 40% of the screen,
+    // and the keyboard eats into that again — a screen-fraction ceiling would
+    // be taller than the whole sheet there, which is the overflow this fixes.
+    //
+    // The 88 is the card's own chrome that the rows do not get: its padding
+    // plus the action row that must stay reachable at any height.
+    return LayoutBuilder(
+      builder: (context, constraints) => _body(
+        context,
+        bottomInset,
+        cardRowsCap: ((constraints.maxHeight - bottomInset) * 0.42 - 88)
+            .clamp(88.0, 340.0),
+      ),
+    );
+  }
+
+  Widget _body(
+    BuildContext context,
+    double bottomInset, {
+    required double cardRowsCap,
+  }) {
+    final meta = _entryMeta[widget.entryPoint]!;
 
     return Column(
       children: [
@@ -443,6 +467,7 @@ class _AiChatBodyState extends State<AiChatBody> {
             builder: (_, __) => AdvisorLogCard(
               ledger: _ledger!,
               proposals: _presenter.financeProposals,
+              maxRowsHeight: cardRowsCap,
             ),
           ),
         Padding(
