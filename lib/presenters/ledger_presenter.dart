@@ -1462,6 +1462,25 @@ class LedgerPresenter extends ChangeNotifier with SafeNotifier {
   // answers it instantly and for free. These setters are what the card's chips
   // call.
 
+  /// Puts already-bound rows on the review card, with no extractor call.
+  ///
+  /// The entry point for a caller that has read the message itself — Nudgy's
+  /// `logTransactions` tool, which arrives with entries already bound against
+  /// the live account and category lists. It commits nothing: the card is
+  /// still the confirm surface, so an entry the model got wrong is caught in
+  /// exactly the same place as one the extractor got wrong.
+  void presentEntriesForReview(List<ExtractedEntry> entries) {
+    if (entries.isEmpty) return;
+    _chatState = _chatState.copyWith(
+      phase: ChatPhase.reviewing,
+      entries: entries,
+      draft: entries.first.txn,
+      clearLastStep: true,
+      clearUnclear: true,
+    );
+    safeNotify();
+  }
+
   /// Seeds the review card without a round trip through the extractor, so a
   /// widget test can drive the real presenter rather than a stand-in.
   @visibleForTesting

@@ -186,6 +186,90 @@ const List<AiTool> kFinanceTools = [
       },
     },
   ),
+  AiTool(
+    name: 'logTransactions',
+    kind: AiToolKind.create,
+    description:
+        'Propose one or more ledger transactions — actual money that moved '
+        '(spending, income received, a transfer between the user\'s own '
+        'accounts). Call it whenever the user asks you to log, record, add or '
+        're-log spending, including when the amounts come from earlier in this '
+        'conversation ("log the oil change again"): listing the entries in '
+        'prose logs nothing. Every entry lands on a review card where the user '
+        'fixes anything wrong and taps Log, so nothing is saved by this call '
+        'and you must not say it was. Use the exact account and category NAMES '
+        'from the snapshot; leave a field out rather than inventing one and '
+        'the card gives the user a picker for it. Amounts are separate entries '
+        'when they were separate charges (₱295 oil and ₱50 labour are two). '
+        'This does NOT edit or delete anything already in the ledger — for a '
+        'correction, tell the user to open the entry in the Ledger.',
+    inputSchema: {
+      'type': 'object',
+      'required': ['entries'],
+      'properties': {
+        'entries': {
+          'type': 'array',
+          'minItems': 1,
+          'maxItems': 10,
+          'items': {
+            'type': 'object',
+            'required': ['amount', 'description'],
+            'properties': {
+              'amount': {
+                'type': 'number',
+                'description': 'In pesos, always positive. Direction comes '
+                    'from "type", never from a minus sign.',
+              },
+              'description': {
+                'type': 'string',
+                'description': 'Short human label, e.g. "Motor oil change". '
+                    'Not the raw sentence.',
+              },
+              'type': {
+                'type': 'string',
+                'enum': ['outflow', 'inflow', 'transfer'],
+                'description': 'Default outflow. "transfer" moves money '
+                    'between the user\'s own accounts and is never spending.',
+              },
+              'account': {
+                'type': 'string',
+                'description': 'Account NAME the money left or entered, '
+                    'exactly as the snapshot spells it.',
+              },
+              'category': {
+                'type': 'string',
+                'description': 'Expense/income category NAME. Omit on a '
+                    'transfer.',
+              },
+              'transferTo': {
+                'type': 'string',
+                'description': 'Destination account NAME. Transfers only.',
+              },
+              'date': {
+                'type': 'string',
+                'description': 'YYYY-MM-DD. Omit for today. Never a future '
+                    'date.',
+              },
+              'note': {'type': 'string', 'description': 'Optional free text.'},
+              'reimbursable': {
+                'type': 'boolean',
+                'description': 'True when the user spent it but is owed it '
+                    'back (a work expense, money spotted for someone).',
+              },
+              'owedBy': {
+                'type': 'string',
+                'description': 'Who owes a reimbursable expense back.',
+              },
+              'expectedReimbursementDate': {
+                'type': 'string',
+                'description': 'YYYY-MM-DD the money is expected back.',
+              },
+            },
+          },
+        },
+      },
+    },
+  ),
 ];
 
 /// The catalogue in the shape the backend forwards to Bedrock.
