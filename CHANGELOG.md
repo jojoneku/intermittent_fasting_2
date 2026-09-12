@@ -13,6 +13,16 @@ distributed via `manifest.json`.
 
 ## [Unreleased]
 
+## [1.1.80] - 2026-09-12
+
+### Added
+- price book screen; fix(nutrition): learn same-day repeats
+- price-memory typeahead + reworked add-item form
+
+### Fixed
+- state the prompt trust boundary in the prompts themselves
+- close the seven findings from the network/data review
+
 ## [1.1.79] - 2026-09-11
 
 ### Fixed
@@ -772,7 +782,7 @@ distributed via `manifest.json`.
 - narrow on-device step SPN match to documented phone prefix
 - merge on-device step labels so Health Connect relabels don't drop data
 
-[Unreleased]: https://github.com/jojoneku/nudgr-fasting-habit-app/compare/v1.1.79...HEAD
+[Unreleased]: https://github.com/jojoneku/nudgr-fasting-habit-app/compare/v1.1.80...HEAD
 [1.1.0]: https://github.com/jojoneku/nudgr-fasting-habit-app/releases/tag/v1.1.0
 [1.1.1]: https://github.com/jojoneku/nudgr-fasting-habit-app/releases/tag/v1.1.1
 [1.1.2]: https://github.com/jojoneku/nudgr-fasting-habit-app/releases/tag/v1.1.2
@@ -853,3 +863,4 @@ distributed via `manifest.json`.
 [1.1.77]: https://github.com/jojoneku/nudgr-fasting-habit-app/releases/tag/v1.1.77
 [1.1.78]: https://github.com/jojoneku/nudgr-fasting-habit-app/releases/tag/v1.1.78
 [1.1.79]: https://github.com/jojoneku/nudgr-fasting-habit-app/releases/tag/v1.1.79
+[1.1.80]: https://github.com/jojoneku/nudgr-fasting-habit-app/releases/tag/v1.1.80
