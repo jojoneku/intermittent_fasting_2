@@ -252,6 +252,71 @@ void main() {
       expect(p.items[1].unitPrice, 40);
     });
 
+    test('suggestions surface every past variant of a partially typed name',
+        () async {
+      final p = await build();
+      await p.addItem(name: 'Bear Brand 1L', unitPrice: 92);
+      await p.addItem(name: 'Bear Brand powdered milk 240g', unitPrice: 128);
+      await p.addItem(name: 'Rice 5kg', unitPrice: 320);
+
+      final matches = p.suggestions('bear');
+      expect(matches.map((m) => m.displayName),
+          containsAll(['Bear Brand 1L', 'Bear Brand powdered milk 240g']));
+      expect(matches.length, 2);
+      // The price rides along so the sheet can show it for cross-checking.
+      expect(matches.firstWhere((m) => m.displayName == 'Bear Brand 1L')
+          .lastPrice, 92);
+    });
+
+    test('suggestions on an empty query return the most-bought items',
+        () async {
+      final p = await build();
+      await p.addItem(name: 'Eggs', unitPrice: 250);
+      await p.addItem(name: 'Eggs', unitPrice: 255); // seen twice
+      await p.addItem(name: 'Rice 5kg', unitPrice: 320);
+
+      expect(p.hasPriceMemory, isTrue);
+      expect(p.suggestions('').first.displayName, 'Eggs');
+      expect(p.priceMemory.length, 2);
+    });
+
+    test('an unpriced item is never suggested (nothing was learned)', () async {
+      final p = await build();
+      await p.addItem(name: 'Mystery item');
+
+      expect(p.hasPriceMemory, isFalse);
+      expect(p.suggestions('mystery'), isEmpty);
+    });
+
+    test('addPreviewLabel totals the typed price against the quantity',
+        () async {
+      final p = await build();
+      expect(
+        p.addPreviewLabel(quantity: 2, unitPrice: 58, unit: ItemUnit.piece),
+        '\u00d72 \u00d7 \u20b158.00 = \u20b1116.00',
+      );
+    });
+
+    test('addPreviewLabel marks a memory-sourced total as an estimate',
+        () async {
+      final p = await build();
+      await p.addItem(name: 'Bear Brand 320g', unitPrice: 58);
+      final remembered = p.lookup(name: 'Bear Brand 320g');
+
+      final label = p.addPreviewLabel(
+          quantity: 2, unit: ItemUnit.piece, remembered: remembered);
+      expect(label, contains('~'));
+      expect(label, contains('\u20b1116.00'));
+    });
+
+    test('addPreviewLabel says so when there is no price at all', () async {
+      final p = await build();
+      expect(
+        p.addPreviewLabel(quantity: 1, unit: ItemUnit.piece),
+        contains('no price yet'),
+      );
+    });
+
     test('restoreItem is a no-op if the id already exists', () async {
       final p = await build();
       await p.addItem(name: 'Eggs', unitPrice: 8);

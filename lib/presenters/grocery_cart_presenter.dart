@@ -11,6 +11,7 @@ import 'package:intermittent_fasting/models/grocery/saved_trip.dart';
 import 'package:intermittent_fasting/presenters/ledger_presenter.dart';
 import 'package:intermittent_fasting/services/storage_service.dart';
 import 'package:intermittent_fasting/utils/finance_format.dart';
+import 'package:intermittent_fasting/utils/grocery_price_search.dart';
 import 'package:intermittent_fasting/utils/safe_notifier.dart';
 
 /// Owns the active grocery cart and the learned price memory (Plan 038).
@@ -147,6 +148,42 @@ class GroceryCartPresenter extends ChangeNotifier with SafeNotifier {
   }
 
   // ── Price memory lookup ──────────────────────────────────────────────────────
+
+  /// Everything the user has ever confirmed a price for, most-bought first.
+  /// Backs the add-item sheet's "you've bought this before" suggestions.
+  List<RememberedPrice> get priceMemory =>
+      searchPriceMemory('', _priceMemory.values, limit: _priceMemory.length);
+
+  bool get hasPriceMemory => _priceMemory.isNotEmpty;
+
+  /// Ranked price-memory matches for a partially typed item name.
+  ///
+  /// [lookup] is an exact-key hit and stays that way (it drives auto-fill);
+  /// this is the typeahead alongside it, so "bear" surfaces both
+  /// "Bear Brand 1L" and "Bear Brand powdered 240g" with their last prices.
+  /// An empty [query] returns the user's most-bought items.
+  List<RememberedPrice> suggestions(String query, {int limit = 6}) =>
+      searchPriceMemory(query, _priceMemory.values, limit: limit);
+
+  /// One-line preview of what the add-item form will put in the cart, e.g.
+  /// "2 kg × ₱95.00 = ₱190.00" or "×1 · price unknown — add it at the shelf".
+  /// Lives here so the sheet's `build()` stays free of line-total math.
+  String addPreviewLabel({
+    required double quantity,
+    double? unitPrice,
+    required ItemUnit unit,
+    RememberedPrice? remembered,
+  }) {
+    final qty = quantity <= 0 ? 1.0 : quantity;
+    final qtyLabel = unit.quantityLabel(qty);
+    final price = unitPrice ?? remembered?.lastPrice;
+    if (price == null) {
+      return '$qtyLabel · no price yet — it will show as unpriced';
+    }
+    final total = _toCents(price * qty);
+    final prefix = unitPrice == null ? '~' : '';
+    return '$qtyLabel × ${formatPeso(price)} = $prefix${formatPeso(total)}';
+  }
 
   /// Returns the remembered price for an item identity, or null if unseen.
   RememberedPrice? lookup({String? barcode, String? name}) {
