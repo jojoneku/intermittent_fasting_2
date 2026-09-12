@@ -317,6 +317,92 @@ void main() {
       );
     });
 
+    test('savePriceBookEntry records a price without touching the cart',
+        () async {
+      final p = await build();
+      await p.savePriceBookEntry(
+          name: 'Bear Brand 1L', price: 92, unit: ItemUnit.piece);
+
+      expect(p.isEmpty, isTrue); // nothing added to the cart
+      expect(p.lookup(name: 'bear brand 1l')!.lastPrice, 92);
+      verify(storage.saveGroceryPriceMemory(any)).called(greaterThan(0));
+    });
+
+    test('a price-book entry auto-fills the next time it is added', () async {
+      final p = await build();
+      await p.savePriceBookEntry(name: 'Rice 5kg', price: 320);
+      await p.addItem(name: 'rice 5kg');
+
+      expect(p.items.first.priceState, PriceState.remembered);
+      expect(p.items.first.unitPrice, 320);
+    });
+
+    test('editing a price keeps the purchase count — a fix is not a purchase',
+        () async {
+      final p = await build();
+      await p.addItem(name: 'Eggs', unitPrice: 250);
+      await p.addItem(name: 'Eggs', unitPrice: 250);
+      expect(p.lookup(name: 'Eggs')!.timesSeen, 2);
+
+      await p.savePriceBookEntry(name: 'Eggs', price: 265);
+      final updated = p.lookup(name: 'Eggs')!;
+      expect(updated.lastPrice, 265);
+      expect(updated.timesSeen, 2);
+    });
+
+    test('renaming an entry does not leave the old key orphaned', () async {
+      final p = await build();
+      await p.addItem(name: 'Bear Brand', unitPrice: 92);
+      final original = p.lookup(name: 'Bear Brand')!;
+
+      await p.savePriceBookEntry(
+        name: 'Bear Brand 1L',
+        price: 95,
+        replacingKey: original.key,
+      );
+
+      expect(p.lookup(name: 'Bear Brand'), isNull);
+      expect(p.lookup(name: 'Bear Brand 1L')!.lastPrice, 95);
+      expect(p.priceMemory.length, 1);
+    });
+
+    test('deletePriceBookEntry forgets a price', () async {
+      final p = await build();
+      await p.addItem(name: 'Eggs', unitPrice: 250);
+      await p.deletePriceBookEntry(p.lookup(name: 'Eggs')!.key);
+
+      expect(p.hasPriceMemory, isFalse);
+      expect(p.lookup(name: 'Eggs'), isNull);
+    });
+
+    test('clearPriceBook empties the book but leaves the cart alone', () async {
+      final p = await build();
+      await p.addItem(name: 'Eggs', unitPrice: 250);
+      await p.clearPriceBook();
+
+      expect(p.hasPriceMemory, isFalse);
+      expect(p.itemCount, 1); // the cart line is untouched
+      expect(p.items.first.unitPrice, 250);
+    });
+
+    test('an empty name or negative price is rejected', () async {
+      final p = await build();
+      await p.savePriceBookEntry(name: '   ', price: 10);
+      await p.savePriceBookEntry(name: 'Eggs', price: -5);
+
+      expect(p.hasPriceMemory, isFalse);
+    });
+
+    test('priceBookSummary reports the count and a one-of-each basket',
+        () async {
+      final p = await build();
+      expect(p.priceBookSummary, 'No prices saved yet');
+
+      await p.savePriceBookEntry(name: 'Eggs', price: 250);
+      await p.savePriceBookEntry(name: 'Rice 5kg', price: 320);
+      expect(p.priceBookSummary, '2 items · ₱570.00 for one of each');
+    });
+
     test('restoreItem is a no-op if the id already exists', () async {
       final p = await build();
       await p.addItem(name: 'Eggs', unitPrice: 8);
