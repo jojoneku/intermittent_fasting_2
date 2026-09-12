@@ -252,8 +252,8 @@ class GroceryCartPresenter extends ChangeNotifier with SafeNotifier {
   String get priceBookSummary {
     if (_priceMemory.isEmpty) return 'No prices saved yet';
     final n = _priceMemory.length;
-    final basket = _toCents(
-        _priceMemory.values.fold(0.0, (sum, p) => sum + p.lastPrice));
+    final basket =
+        _toCents(_priceMemory.values.fold(0.0, (sum, p) => sum + p.lastPrice));
     return '$n ${n == 1 ? 'item' : 'items'} · ${formatPeso(basket)} '
         'for one of each';
   }

@@ -264,8 +264,9 @@ void main() {
           containsAll(['Bear Brand 1L', 'Bear Brand powdered milk 240g']));
       expect(matches.length, 2);
       // The price rides along so the sheet can show it for cross-checking.
-      expect(matches.firstWhere((m) => m.displayName == 'Bear Brand 1L')
-          .lastPrice, 92);
+      expect(
+          matches.firstWhere((m) => m.displayName == 'Bear Brand 1L').lastPrice,
+          92);
     });
 
     test('suggestions on an empty query return the most-bought items',
