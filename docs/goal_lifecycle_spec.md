@@ -57,6 +57,7 @@ Derived, never stored — a getter on `FinancialAccount`, alongside the existing
 - **Active goals** — `saving` and `funded`. A funded card shows 100%, a ✅, and "Funded <date>", plus a **Mark as spent** action. When a funded goal's balance has fallen below its target, the card adds a quiet line ("Balance is now ₱0 — spent it?") next to that action. A hint, not a modal: no dismissal state to store and no false positive to apologise for.
 - **Completed** — a separate section for `redeemed`, collapsed by default. Reads "Phone · funded ₱6,000 · spent Sep 13, 2026". No progress bar, because 0% would be a lie about a goal that succeeded.
 - A redeemed goal offers **Start again**, which clears both stamps and takes a fresh target. Kept explicit rather than automatic: a phone in 2026 and a phone in 2029 are different goals, but an annual insurance fund genuinely is the same one.
+- It also offers **Archive**, which sets `isActive: false`. That is the app's existing archived state ("Hidden everywhere until reactivated") and every account picker already filters on it, so finished goals stop cluttering transfer dropdowns without any new concept. Reversible from the accounts inventory; transactions are untouched.
 
 **Progress never reads below 100% once funded**, at any surface, so a drawdown cannot look like regression.
 
@@ -67,9 +68,8 @@ Derived, never stored — a getter on `FinancialAccount`, alongside the existing
 - **Redemption** — `LedgerPresenter.markGoalRedeemed(id)` / `restartGoal(id, newTarget)`. Presenter-owned, per the RPG-math rule.
 - **Set-asides** — `_goalIsFunded()` switches from the live balance test to the account's stage (`funded` or `redeemed` both stop the recurrence). This is what fixes the resuming-set-aside bug.
 - **Persistence** — the three fields ride the existing `accounts` blob; no migration, and older rows load with all three null (stage `saving`, which is correct for them).
+- **XP** — funding a goal awards 50, sized against the other Treasury award (50 for clearing a month of bills). No `_awardedXpKeys` bookkeeping is needed: the stamp is write-once per cycle, so "newly stamped" already means "not paid for yet". A restarted goal can earn it again, which is correct — that is a second goal reached, not the same one re-counted.
 
 ## ⛔ Out of scope
 
-- **`totalContributed`.** A partial withdrawal mid-save still drops the live progress bar with no explanation. Tracking cumulative contributions separately would let the card read "contributed ₱4,000, withdrew ₱2,000" honestly. Deliberately deferred — it is a bigger change than the stamps and does not block them.
-- **Account-level archiving.** `redeemed` goals leave the active list, but the account still appears in transfer/account pickers. A global `isArchived` touches ~106 `.accounts` call sites and deserves its own change.
-- **XP for funding a goal.** A natural RPG hook, but it pulls in `StatsPresenter` and is not needed to make the lifecycle correct.
+- **`totalContributed`.** While a goal is still `saving`, progress is the live balance, so withdrawing ₱2,000 of ₱4,000 saved drops the bar from 66% to 33%. That figure is *accurate* — ₱2,000 of ₱6,000 really is where you stand — but it cannot distinguish "never saved much" from "saved a lot, then raided it". Fixing that means tracking cumulative inflows per goal, maintained on every transfer and rebuilt for existing accounts from ledger history. A real feature with its own migration, not a line of display logic, and nothing here is wrong without it.

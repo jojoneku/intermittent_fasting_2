@@ -191,6 +191,58 @@ void main() {
     });
   });
 
+  group('XP', () {
+    test('funding a goal pays out once, not on every later contribution',
+        () async {
+      final ledger = await buildLedger();
+      await fund(ledger, 6000, 7);
+      verify(stats.addXp(50)).called(1);
+
+      // Topping it up further is not a second achievement.
+      await fund(ledger, 1000, 8);
+      verifyNever(stats.addXp(50));
+    });
+
+    test('no payout while the goal is still short', () async {
+      final ledger = await buildLedger();
+      await fund(ledger, 5999, 7);
+      verifyNever(stats.addXp(50));
+    });
+
+    test('spending and re-funding a restarted goal earns it again', () async {
+      final ledger = await buildLedger();
+      await fund(ledger, 6000, 7);
+      verify(stats.addXp(50)).called(1);
+
+      await ledger.markGoalRedeemed('phone');
+      await spendGoal(ledger, 6000);
+      await ledger.restartGoalAccount('phone', newTarget: 9000);
+      await fund(ledger, 9000, 10);
+
+      // A second goal reached, not the same one re-counted.
+      verify(stats.addXp(50)).called(1);
+    });
+  });
+
+  group('archiving', () {
+    test('a completed goal can be filed away without deleting anything',
+        () async {
+      final ledger = await buildLedger();
+      await fund(ledger, 6000, 7);
+      await ledger.markGoalRedeemed('phone');
+
+      // `isActive: false` is the app's existing "Archived — hidden everywhere
+      // until reactivated" state, which every account picker already filters.
+      final archived = goalIn(ledger).copyWith(isActive: false);
+      await ledger.saveAccount(archived);
+
+      expect(goalIn(ledger).isActive, isFalse);
+      // Still present, so its transactions keep their account reference.
+      expect(ledger.accounts.any((a) => a.id == 'phone'), isTrue);
+      expect(goalIn(ledger).goalStage, GoalStage.redeemed);
+    });
+  });
+
   group('re-planning the target', () {
     test('raising it above the balance un-funds the goal', () async {
       final ledger = await buildLedger();

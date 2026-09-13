@@ -332,6 +332,21 @@ class TreasuryDashboardPresenter extends ChangeNotifier {
     await _syncAccountsToLedger();
   }
 
+  /// Files a completed goal away into the existing "Archived" inventory group.
+  ///
+  /// Reuses `isActive`, which the app already treats as archived — "Hidden
+  /// everywhere until reactivated", and every account picker already filters on
+  /// it. So this needs no new concept: it just offers the existing one at the
+  /// moment it becomes useful, instead of leaving finished goals cluttering the
+  /// transfer dropdowns forever. Reversible from the accounts inventory, and the
+  /// transactions are untouched either way.
+  Future<void> archiveGoal(String accountId) async {
+    final account = _accounts.where((a) => a.id == accountId).firstOrNull;
+    if (account == null) return;
+    await updateAccount(
+        account.copyWith(isActive: false, updatedAt: DateTime.now()));
+  }
+
   /// Starts a completed goal over against a fresh target, keeping the account
   /// and its whole transaction history.
   Future<void> restartGoalAccount(String accountId,

@@ -64,6 +64,19 @@ class GoalsSavingsScreen extends StatelessWidget {
     if (ok) await presenter.markGoalRedeemed(account.id);
   }
 
+  Future<void> _confirmArchive(
+      BuildContext context, FinancialAccount account) async {
+    final ok = await AppConfirmDialog.confirm(
+      context: context,
+      title: 'Archive ${account.name}?',
+      body: 'Files it away and takes it out of your account pickers. Nothing '
+          'is deleted — the transactions stay in your ledger, and you can '
+          'bring it back from the accounts list any time.',
+      confirmLabel: 'Archive',
+    );
+    if (ok) await presenter.archiveGoal(account.id);
+  }
+
   Future<void> _promptRestart(
       BuildContext context, FinancialAccount account) async {
     await AppBottomSheet.show(
@@ -169,6 +182,8 @@ class GoalsSavingsScreen extends StatelessWidget {
                             account: completedGoals[i],
                             onRestart: () =>
                                 _promptRestart(context, completedGoals[i]),
+                            onArchive: () =>
+                                _confirmArchive(context, completedGoals[i]),
                           ),
                           if (i < completedGoals.length - 1)
                             Divider(
@@ -314,8 +329,13 @@ class _SavingsRow extends StatelessWidget {
 class _CompletedGoalRow extends StatelessWidget {
   final FinancialAccount account;
   final VoidCallback onRestart;
+  final VoidCallback onArchive;
 
-  const _CompletedGoalRow({required this.account, required this.onRestart});
+  const _CompletedGoalRow({
+    required this.account,
+    required this.onRestart,
+    required this.onArchive,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -360,6 +380,15 @@ class _CompletedGoalRow extends StatelessWidget {
               visualDensity: VisualDensity.compact,
             ),
             child: const Text('Start again'),
+          ),
+          SizedBox(
+            width: 44,
+            height: 44,
+            child: IconButton(
+              tooltip: 'Archive',
+              onPressed: onArchive,
+              icon: const Icon(Icons.inventory_2_outlined, size: 18),
+            ),
           ),
         ],
       ),

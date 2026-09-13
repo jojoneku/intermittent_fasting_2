@@ -2434,14 +2434,35 @@ class LedgerPresenter extends ChangeNotifier with SafeNotifier {
     _stampFundedGoals();
   }
 
-  /// Records the moment a goal first reaches its target.
+  /// XP for fully funding a savings goal. Sized against the other Treasury
+  /// award (50 for clearing a month of bills) — months of setting money aside
+  /// is at least that.
+  static const int _kGoalFundedXp = 50;
+
+  /// Records the moment a goal first reaches its target, and pays out for it.
   ///
   /// Hangs off [_applyBalanceDelta] because that is the single choke point every
   /// balance change flows through, so no funding route can miss it. The rule
   /// itself lives in `goal_lifecycle.dart`, shared with the dashboard presenter.
+  ///
+  /// The award needs no `_awardedXpKeys` bookkeeping: the stamp is write-once
+  /// per cycle, so "newly stamped" already means "not paid for yet". Restarting
+  /// a goal clears the stamp and can earn it again, which is correct — that is
+  /// a second goal reached, not the same one re-counted.
   void _stampFundedGoals() {
     final now = DateTime.now();
+    final before = {
+      for (final a in _accounts)
+        if (a.goalFundedAt != null) a.id,
+    };
     _accounts = [for (final a in _accounts) stampIfFunded(a, now)];
+    final newlyFunded = _accounts
+        .where((a) => a.goalFundedAt != null && !before.contains(a.id))
+        .length;
+    if (newlyFunded > 0) {
+      // ignore: unawaited_futures
+      _stats.addXp(_kGoalFundedXp * newlyFunded);
+    }
   }
 
   void _reverseBalanceDelta(
